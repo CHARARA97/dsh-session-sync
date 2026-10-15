@@ -1,0 +1,38 @@
+{
+  "name": "@local/dsh-chat-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DSH 会话与工作区文件同步：显式 push/pull、单会话或全部会话、过程可见、冲突交给你裁决。",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node tests/engine.test.mjs && node tests/delivery.test.mjs && node tests/client-render.test.mjs"
+  },
+  "icon": "./icon.svg",
+  "meta": {
+    "title": "会话同步",
+    "description": "把 DSH 会话与工作区文件托管在你自己的 GitHub 私有仓库：手动选择 push 或 pull、单个会话或全部会话，全程显示过程，冲突不自动吞掉。"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon.svg": "./icon.svg"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
