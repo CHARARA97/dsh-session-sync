@@ -1,8 +1,7 @@
 {
-  "name": "@local/dsh-chat-sync",
+  "name": "@charara97/dsh-session-sync",
   "version": "1.0.0",
-  "private": true,
-  "description": "DSH 会话与工作区文件同步：显式 push/pull、单会话或全部会话、过程可见、冲突交给你裁决。",
+  "description": "DSH 会话与工作区文件同步：显式推送/取回、单个或全部会话、逐条判断、部分交付、冲突交由人工裁决。",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -34,5 +33,26 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CHARARA97/dsh-session-sync.git"
+  },
+  "homepage": "https://github.com/CHARARA97/dsh-session-sync#readme",
+  "bugs": {
+    "url": "https://github.com/CHARARA97/dsh-session-sync/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "sync",
+    "github",
+    "session"
+  ],
+  "author": "CHARARA97",
+  "publishConfig": {
+    "access": "public"
+  }
 }

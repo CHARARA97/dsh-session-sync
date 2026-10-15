@@ -2,4 +2,4 @@
 # 本文件把插件自己的宿主行插进 profile；浏览器端由 package.json 的 dsh.client 装配。
 - insert:
     - id: dsh-chat-sync
-      name: "@local/dsh-chat-sync"
+      name: "@charara97/dsh-session-sync"

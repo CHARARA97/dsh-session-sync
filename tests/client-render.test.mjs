@@ -193,7 +193,7 @@ function loadClient() {
   fn(window, { head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, style: {} }) }, globalThis.fetch,
     () => 0, () => {}, console);
   assert.ok(captured.def, 'client.js 没有调用 window.__ModuleLoader__.load');
-  assert.equal(captured.def.id, '@local/dsh-chat-sync');
+  assert.equal(captured.def.id, '@charara97/dsh-session-sync');
   const mod = captured.def.factory((name) => {
     if (name === 'react') return React;
     throw new Error('unexpected require: ' + name);

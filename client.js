@@ -13,7 +13,7 @@
  * 它上面的文字必须用 `--dsw-alias-label-primary-foreground`，用 #fff 就是白底白字。
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-chat-sync',
+  id: '@charara97/dsh-session-sync',
   factory: (require) => {
     const React = require('react');
     const e = React.createElement;

@@ -71,7 +71,7 @@
 ## 安装到另一台机器
 
 本插件以 Cordis bundle 形式装在 DSH 的 profile 里，源码仓库是
-<https://github.com/CHARARA97/dsh-session-sync>（仓库名与包名不同，包名仍是 `@local/dsh-chat-sync`）。
+<https://github.com/CHARARA97/dsh-session-sync>，包名 `@charara97/dsh-session-sync`。
 
 ```sh
 git clone https://github.com/CHARARA97/dsh-session-sync.git
@@ -94,9 +94,9 @@ plugin_manager  action: install_bundle
 ```json
 {
   "dependencies": {
-    "@local/dsh-chat-sync": "link:/绝对路径/dsh-session-sync"
+    "@charara97/dsh-session-sync": "link:/绝对路径/dsh-session-sync"
   },
-  "dsh": { "profile": { "bundles": [ "...", "@local/dsh-chat-sync" ] } }
+  "dsh": { "profile": { "bundles": [ "...", "@charara97/dsh-session-sync" ] } }
 }
 ```
 
