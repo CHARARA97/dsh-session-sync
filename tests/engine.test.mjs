@@ -358,6 +358,47 @@ async function main() {
     assert.ok(!fs.existsSync(path.join(homeA, 'dsh-sync.json')), '没有凭空创建 dsh-sync.json');
   });
 
+  await step('profile 清单/锁文件/组合结果是本机专属：从索引移出、文件保留', async () => {
+    // 复现真实场景：旧插件（以及我改名时跑的 pnpm）把这些文件提交进了 ~/.dsh 仓库
+    const files = {
+      'profiles/web/package.json': '{"name":"p","dependencies":{"x":"link:/home/alice/x"}}',
+      'profiles/web/pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+      'profiles/web/pnpm-workspace.yaml': 'packages:\n  - .\n',
+      'profiles/web/cordis.yml': '# composed\n',
+      'profiles/web/cordis.patch.yml': '- id: keep-me\n',
+    };
+    for (const [rel, body] of Object.entries(files)) {
+      const abs = path.join(homeA, rel);
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, body);
+    }
+    await run('git', ['-C', homeA, 'add', '-f', '--', ...Object.keys(files)]);
+    await run('git', ['-C', homeA, 'commit', '-q', '-m', 'pretend the old layout tracked these']);
+
+    // 跑一次同步，让引擎执行「机器本地文件移出跟踪」
+    await engineA.execute({ direction: 'push', scope: 'all' });
+
+    const tracked = (await run('git', ['-C', homeA, 'ls-files', '--', 'profiles/'])).out
+      .split('\n').map((x) => x.trim()).filter(Boolean);
+
+    for (const rel of ['profiles/web/package.json', 'profiles/web/pnpm-lock.yaml', 'profiles/web/pnpm-workspace.yaml', 'profiles/web/cordis.yml']) {
+      assert.ok(!tracked.includes(rel), `${rel} 不应再被跟踪`);
+      assert.ok(fs.existsSync(path.join(homeA, rel)), `${rel} 的本地文件必须保留`);
+    }
+    // 用户自己编辑的 patch 层仍然同步
+    assert.ok(tracked.includes('profiles/web/cordis.patch.yml'), 'cordis.patch.yml 仍应被跟踪');
+
+    // gitignore 补齐了这几条，否则下次 git add -A 又会把它们加回来
+    const ig = fs.readFileSync(path.join(homeA, '.gitignore'), 'utf8');
+    for (const pat of ['profiles/*/package.json', 'profiles/*/pnpm-lock.yaml', 'profiles/*/pnpm-workspace.yaml', 'profiles/*/cordis.yml']) {
+      assert.ok(ig.split('\n').some((l) => l.trim() === pat), `.gitignore 应含 ${pat}`);
+    }
+    // 移出跟踪之后再跑一次，索引保持干净
+    const st = await run('git', ['-C', homeA, 'status', '--porcelain', '--', 'profiles/']);
+    assert.ok(!/^\s*[AM]\s+profiles\/web\/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|cordis\.yml)/m.test(st.out),
+      `profile 清单不该再出现在 status 里，实际：${st.out}`);
+  });
+
   const failed = results.filter((x) => x[0] === 'fail');
   process.stdout.write(`\n${results.length - failed.length}/${results.length} 通过\n`);
   if (failed.length) {

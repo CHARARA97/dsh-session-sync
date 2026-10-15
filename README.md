@@ -134,6 +134,25 @@ plugin_manager  action: install_bundle
 | `workspaceFiles` | `{ "<工作区id>": ["规则", …] }`，gitignore 语法（等价于直接编辑忽略文件，供工具用） |
 | `decisions` | 已记住的裁决（删除类） |
 
+### 哪些东西永远不同步
+
+除下面这些外，`<DSH_HOME>` 下的内容都会被同步。它们由插件自动写进 `.gitignore`，
+并会**从 git 索引里移出**（本地文件保留），所以即使旧版本曾经跟踪过它们，也会被纠正：
+
+| 路径 | 为什么是本机专属 |
+| --- | --- |
+| `profiles/*/package.json` | 含本机绝对路径（`link:/home/xxx/...`）；同步过去会让对方的插件依赖指向不存在的目录，反而装不上插件 |
+| `profiles/*/pnpm-lock.yaml` | 由上面派生，含同样的绝对路径 |
+| `profiles/*/pnpm-workspace.yaml` | pnpm 生成，含本机时间点相关的条目 |
+| `profiles/*/cordis.yml` | 启动时按各层补丁重新组合生成，同步没有意义 |
+| `.credentials.yaml`、`.anonymous-user-id`、`.dshw-*` | 机器本地机密与状态 |
+| `cache/`、`logs/`、`**/*.log`、`**/node_modules/` | 可再生 / 需各自安装 |
+| `storages/workspace-local-paths.json`、`.chat-sync/` | 「换位置」覆盖与忽略清单都是本机专属 |
+| `workspace-repos/` | 各工作区的影子仓库 |
+
+`profiles/*/cordis.patch.yml` **仍然同步** —— 那是你自己编辑的 profile 补丁层（启用哪些插件、
+各项配置），跨机器带过去通常正是你要的。
+
 ### 工作区里的同步忽略文件
 
 **每个工作区根目录下的 `.dsh-chat-sync-ignore` 即该工作区的忽略规则文件**，每行一条，gitignore 语法：
