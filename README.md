@@ -68,6 +68,49 @@
 
 裁决前本机文件不做任何改动。会话类裁决均可「查看两侧内容」（两侧各自的事件数与最后若干条消息）。
 
+## 安装到另一台机器
+
+本插件以 Cordis bundle 形式装在 DSH 的 profile 里，源码仓库是
+<https://github.com/CHARARA97/dsh-session-sync>（仓库名与包名不同，包名仍是 `@local/dsh-chat-sync`）。
+
+```sh
+git clone https://github.com/CHARARA97/dsh-session-sync.git
+```
+
+然后在 DSH 里用插件管理器把这个目录装成 bundle（`target` 传克隆下来的**绝对路径**）：
+
+```
+plugin_manager  action: install_bundle
+                target: /绝对路径/dsh-session-sync
+```
+
+装完**重启 DSH**。宿主模块有 ESM 缓存，只刷新页面不够。
+
+<details>
+<summary>手动等效做法（本机就是这么装的，供参考）</summary>
+
+在 `<DSH_HOME>/profiles/<profile>/package.json` 里加一条依赖，并把包名加进 bundle 列表：
+
+```json
+{
+  "dependencies": {
+    "@local/dsh-chat-sync": "link:/绝对路径/dsh-session-sync"
+  },
+  "dsh": { "profile": { "bundles": [ "...", "@local/dsh-chat-sync" ] } }
+}
+```
+
+然后在同一个目录 `pnpm install`，重启 DSH。
+（`<profile>` 是 profile 名，例如 `web`；它也在 `$DSH_PROFILE` 里。）
+</details>
+
+**注意两件事不同**：
+
+1. **本插件仓库**（公开，就是上面这个）与**你的会话数据仓库**（私有）是两个仓库。
+   数据仓库地址在「设置 → 会话同步 → 连接设置」里填，那才是存放会话与工作区文件的地方。
+2. 本机专属设置（忽略清单、已记住的裁决）放在 `<DSH_HOME>/.chat-sync/ignore.json`，
+   它**不随同步走**，换机器需要重新配置。
+
 ## 配置
 
 设置页「连接设置」里可改：仓库地址、分支、自动建仓仓库名、Git 代理、工作区统一目录。
