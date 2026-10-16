@@ -379,6 +379,9 @@ window.__ModuleLoader__.load({
       const [repair, setRepair] = useState(null);   // { rel, title, preview, busy, msg } 损坏日志的修复预览
       const [busyMsg, setBusyMsg] = useState('');
       const [units, setUnits] = useState([]);
+      const [unitsTotal, setUnitsTotal] = useState(0);
+      const [unitsReason, setUnitsReason] = useState('');
+      const [unitsError, setUnitsError] = useState('');
       const [unitFilter, setUnitFilter] = useState('todo');
       const [ignore, setIgnore] = useState({ sessions: [], workspaces: [], workspaceFiles: {} });
       const [wsIgnore, setWsIgnore] = useState(null);   // { workspaceId, title, path, exists, content, msg }
@@ -410,10 +413,19 @@ window.__ModuleLoader__.load({
       const refreshUnits = useCallback(async () => {
         try {
           const r = await jget('units');
-          if (!r || r.ok === false) return;
-          setUnits(Array.isArray(r.units) ? r.units : []);
+          if (!r || r.ok === false) { setUnitsError((r && r.error) || '读取条目状态失败'); return; }
+          if (!Array.isArray(r.units)) {
+            // 形状不对就说出来 —— 静默当成空表会显示成「暂无可比较数据」，
+            // 让人以为没有差异，而实际是接口返回坏了。
+            setUnitsError(`条目状态返回了意外的格式（units 是 ${typeof r.units}，不是数组）`);
+            return;
+          }
+          setUnitsError('');
+          setUnits(r.units);
+          setUnitsTotal(typeof r.total === 'number' ? r.total : r.units.length);
+          setUnitsReason(r.reason || '');
           if (r.ignore) setIgnore(r.ignore);
-        } catch { /* 下一轮再试 */ }
+        } catch (e) { setUnitsError('读取条目状态失败：' + (e?.message || e)); }
       }, []);
 
       const saveIgnore = useCallback(async (patch) => {
@@ -845,7 +857,14 @@ window.__ModuleLoader__.load({
               ],
             })),
           filteredUnits.length === 0
-            ? e('div', { className: 'dcs-note' }, units.length ? '所有条目均与远端一致。' : '暂无可比较数据，请先执行一次推送以建立基线。')
+            ? e('div', { className: unitsError ? 'dcs-err' : 'dcs-note' },
+              unitsError
+                ? unitsError
+                : units.length
+                  ? '所有条目均与远端一致。'
+                  : unitsReason === 'no-remote' ? '远端还没有基线，请先执行一次推送。'
+                    : unitsReason === 'no-local' ? '本机仓库还没有任何提交。'
+                      : '所有条目均与远端一致。')
             : e('div', { className: 'dcs-list', style: { maxHeight: 220 } },
               filteredUnits.map((u) => e('div', { key: u.path, className: 'dcs-item', 'data-static': '1' },
                 e('div', { className: 'dcs-txt' },

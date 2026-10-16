@@ -287,8 +287,11 @@ function apply(ctx, config = {}) {
 
   route('units', async (req, res) => {
     try {
-      const units = await engine.unitStates();
-      json(res, 200, { ok: true, units, ignore: engine.ignoreConfig() });
+      // 必须摊平：unitStates() 返回 {ok, units:[], total, ...}，
+      // 直接塞进 units 字段会让客户端拿到一个对象 —— Array.isArray 判定失败，
+      // 于是「条目状态」永远是空的，还显示成「暂无可比较数据」。
+      const r = await engine.unitStates();
+      json(res, 200, { ...r, units: Array.isArray(r.units) ? r.units : [], ignore: engine.ignoreConfig() });
     } catch (e) {
       json(res, 200, { ok: false, error: String(e?.message || e) });
     }

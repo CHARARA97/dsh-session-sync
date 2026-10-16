@@ -588,6 +588,25 @@ async function main() {
     assert.ok(text.includes('删除类裁决'), '应当提示这是删除类决定');
   });
 
+  await step('条目状态：接口与客户端对 units 形状的约定必须成立（源码契约）', () => {
+    // 真实 bug：服务端把整个结果对象塞进 units 字段（对象而非数组），客户端
+    // Array.isArray 判定失败 → 静默当成空表 → 界面写「暂无可比较数据」，
+    // 而会话列表同时显示「与远端不同」，两个面板互相矛盾。
+    //
+    // 这个模拟器不会因为 fresh 而真正重新挂载组件，所以从渲染层验证不了
+    // 这条路径（那样写只会得到一个假通过的测试）。这里改为钉住两端的契约。
+    const idx = fs.readFileSync(path.join(here, '..', 'index.js'), 'utf8');
+    assert.ok(/const r = await engine\.unitStates\(\)/.test(idx), '路由应当先把结果取成变量再摊平');
+    assert.ok(/units: Array\.isArray\(r\.units\) \? r\.units : \[\]/.test(idx), '路由必须把 units 摊平成数组');
+    assert.ok(/\.\.\.r,/.test(idx), '路由应当摊平结果（total / reason 等要留在顶层）');
+
+    assert.ok(/Array\.isArray\(r\.units\)/.test(SRC), '客户端必须校验 units 是数组');
+    assert.ok(/意外的格式/.test(SRC), '客户端遇到坏形状必须显式报错');
+    assert.ok(!/暂无可比较数据，请先执行一次推送以建立基线/.test(SRC),
+      '不该再用那句会把「接口坏了」伪装成「没有差异」的文案');
+    assert.ok(/unitsReason === 'no-remote'/.test(SRC), '没有远端基线时应当给出准确说法');
+  });
+
   await step('侧栏按钮：运行中显示转圈 +「同步中…」', async () => {
     routeState.pingRunning = true;
     const btn = byId.get('dsh-chat-sync-button').Component;
