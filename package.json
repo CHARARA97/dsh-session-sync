@@ -54,5 +54,15 @@
   "author": "CHARARA97",
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "lib/",
+    "locale/",
+    "README.md",
+    "LICENSE"
+  ]
 }
