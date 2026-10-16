@@ -593,6 +593,19 @@ async function main() {
     assert.ok(!/must be of type string/.test(msg), `不该再抛 path 类型错误：${msg}`);
     assert.ok(!/Received null/.test(msg), `不该再出现 null 路径：${msg}`);
 
+    // 关键：工作区的删除裁决必须**记下来**，否则下次推送会把同一批路径重新问一遍
+    // （「选了全部删除到远端、应用后却毫无变化」就是漏了这一步）。
+    const kept = engineA.unitDecision(`ws:${WS_A}:vendor/inner`);
+    assert.ok(kept, '删除裁决必须被记住');
+    assert.equal(kept.choice, 'delete', `记住的应当是 delete，实际：${JSON.stringify(kept)}`);
+
+    // 换成 keep 也要记住（它表示「远端保留、本机不再跟踪」，同样不能反复问）
+    const store3 = engineA.newPendingStore({ progress: new ProgressLog() });
+    await engineA.recordConflict(store3, { repo: `ws:${WS_A}`, relPath: 'vendor/other2', kind: 'file', reason: 'delete-local' });
+    const saved3 = engineA.savePending(store3);
+    await engineA.resolveConflicts({ pendingId: saved3.id, decisions: [{ id: store3.conflicts[0].id, choice: 'keep' }] });
+    assert.equal(engineA.unitDecision(`ws:${WS_A}:vendor/other2`)?.choice, 'keep', 'keep 裁决同样要被记住');
+
     // 「两边都留」在缺少远端副本时也必须明确报错，而不是抛异常
     const store2 = engineA.newPendingStore({ progress: new ProgressLog() });
     await engineA.recordConflict(store2, {
