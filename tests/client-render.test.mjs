@@ -511,6 +511,41 @@ async function main() {
     assert.ok(doneText.includes('剩余 1 项待裁决'), '应当显示还剩多少项');
   });
 
+  await step('一键全部设为：每个选项一个按钮，数字只统计支持它的冲突', async () => {
+    const section = byId.get('dsh-chat-sync-section').Component;
+    const rounds = await renderComponent(section, { fresh: true });
+    const text = rounds.map((r) => r.text.join(' ')).join('\n');
+    assert.ok(text.includes('一键全部设为'), '缺少一键全选那一行');
+    // 夹具里 4 条：2 条内容类（local/remote/both）+ 1 条 delete-local + 1 条 corrupt-session-log（内容类）
+    // → local/remote/both 各 3 项，delete/keep 各 1 项
+    assert.ok(text.includes('保留本机（3）'), `内容类计数不对：${text.slice(-420)}`);
+    assert.ok(text.includes('采用远端（3）'), '内容类计数不对');
+    assert.ok(text.includes('两边都留（3）'), '内容类计数不对');
+    assert.ok(text.includes('删除（1）'), '删除类计数不对（应当只有 1 条支持）');
+    assert.ok(text.includes('保留（1）'), '删除类计数不对');
+
+    // 点「删除（1）」→ 只应影响那一条，其余保持未选
+    const delBtn = rounds.flatMap((r) => r.handlers).find((h) => h.onClick && h.label === '删除（1）');
+    assert.ok(delBtn, '缺少「删除（1）」按钮');
+    delBtn.onClick();
+    const after = await renderComponent(section, {});
+    const t2 = after[after.length - 1].text.join(' ');
+    assert.ok(t2.includes('已选 1 / 4'), `只应选中 1 项，实际：${t2.slice(-300)}`);
+    assert.ok(t2.includes('已把 1 项设为「删除」'), '应当就地说明影响了几项');
+    assert.ok(t2.includes('应用所选 1 项'), '主按钮应当反映已选数量');
+
+    // 再点「采用远端（3）」：只覆盖支持它的那 3 项。之前选的那条是删除类、不支持
+    // remote，所以保留原选择 —— 总数 1+3=4，而且必须明确告诉用户「另有 1 项保持不变」。
+    const rmBtn = after.flatMap((r) => r.handlers).find((h) => h.onClick && h.label === '采用远端（3）');
+    assert.ok(rmBtn, '缺少「采用远端（3）」按钮');
+    rmBtn.onClick();
+    const after2 = await renderComponent(section, {});
+    const t3 = after2[after2.length - 1].text.join(' ');
+    assert.ok(t3.includes('已把 3 项设为「采用远端」'), `应当说明影响了几项：${t3.slice(-300)}`);
+    assert.ok(t3.includes('另有 1 项不支持这个选项'), '必须说明有一项不受影响，否则总数对不上会让人困惑');
+    assert.ok(t3.includes('已选 4 / 4'), `删除类那一项应当保留原选择：${t3.slice(-300)}`);
+  });
+
   await step('日志损坏：不是给「保留本机 / 采用远端」，而是给「截断到合法前缀」并显示预览', async () => {
     const section = byId.get('dsh-chat-sync-section').Component;
     const rounds = await renderComponent(section, { fresh: true });

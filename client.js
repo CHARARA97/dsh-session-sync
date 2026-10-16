@@ -254,6 +254,19 @@ window.__ModuleLoader__.load({
     const isDeleteReason = (r) => DELETE_REASONS.includes(r);
     // 删除类的两种选择在不同状态下含义完全不同，所以每个原因给一组自己的说法，
     // 免得「删除 / 保留」在不同场景里被理解成不同的事。
+    // 内容类冲突的三选一
+    const CONTENT_OPTIONS = [
+      { value: 'local', label: '保留本机' },
+      { value: 'remote', label: '采用远端' },
+      { value: 'both', label: '两边都留' },
+    ];
+    // 某个冲突可选的裁决 —— 卡片和「一键全部设为」共用这一份，避免两边逻辑漂移
+    const optionsFor = (conflict) => (isDeleteReason(conflict.reason)
+      ? DELETE_OPTIONS[conflict.reason] || [{ value: 'delete', label: '删除' }, { value: 'keep', label: '保留' }]
+      : CONTENT_OPTIONS);
+    // 「一键全部设为」按钮上的统称（删除类的具体含义随冲突状态而定，卡片上会给出各自说法）
+    const BULK_LABEL = { local: '保留本机', remote: '采用远端', both: '两边都留', delete: '删除', keep: '保留' };
+
     const DELETE_OPTIONS = {
       'delete-local': [{ value: 'delete', label: '同步删除到远端' }, { value: 'keep', label: '仅本机删除' }],
       'delete-modify': [{ value: 'delete', label: '保留删除' }, { value: 'keep', label: '采用远端版本' }],
@@ -299,9 +312,7 @@ window.__ModuleLoader__.load({
       const broken = conflict.reason === 'corrupt-session-log' || conflict.reason === 'unreadable';
       const mine = repair && repair.rel === conflict.path ? repair : null;
       const fmtTime = (t) => (typeof t === 'number' ? new Date(t).toLocaleString() : '—');
-      const options = isDeleteReason(conflict.reason)
-        ? DELETE_OPTIONS[conflict.reason] || [{ value: 'delete', label: '删除' }, { value: 'keep', label: '保留' }]
-        : [{ value: 'local', label: '保留本机' }, { value: 'remote', label: '采用远端' }, { value: 'both', label: '两边都留' }];
+      const options = optionsFor(conflict);
       return e('div', { className: 'dcs-cf' },
         e('div', { className: 'dcs-cf-h', title: conflict.path }, conflict.title || conflict.path),
         e('div', { className: 'dcs-t2' },
@@ -595,6 +606,30 @@ window.__ModuleLoader__.load({
         setRepair({ rel: conflict.path, title: conflict.title || conflict.path, preview: r, msg: '' });
       }, []);
 
+      /** 一键把支持某个选项的所有冲突都设成它（会覆盖已选的；只影响支持该选项的冲突） */
+      const applyBulk = useCallback((value) => {
+        const next = { ...decisions };
+        let n = 0;
+        let untouched = 0;
+        for (const p of pending) {
+          for (const c of p.conflicts) {
+            if (!optionsFor(c).some((o) => o.value === value)) {
+              // 不支持这个选项的（例如删除类只能选「删除/保留」）保持原样，
+              // 但如果它已经有选择，必须说出来 —— 否则用户会奇怪总数为什么对不上。
+              if (next[c.id]) untouched += 1;
+              continue;
+            }
+            next[c.id] = value;
+            n += 1;
+          }
+        }
+        setDecisions(next);
+        const label = BULK_LABEL[value] || value;
+        setCfMsg(untouched
+          ? `已把 ${n} 项设为「${label}」；另有 ${untouched} 项不支持这个选项（例如删除类只能选「删除/保留」），它们的原有选择保持不变。请点击「应用所选」提交。`
+          : `已把 ${n} 项设为「${label}」，请点击「应用所选 ${n} 项」提交。`);
+      }, [pending, decisions]);
+
       const applyRepair = useCallback(async () => {
         if (!repair?.preview) return;
         setRepair({ ...repair, busy: true, msg: '' });
@@ -617,7 +652,7 @@ window.__ModuleLoader__.load({
         setCfMsg('');
         const chosen = pending.flatMap((p) => p.conflicts.filter((c) => decisions[c.id]));
         if (!chosen.length) {
-          setCfMsg('请先选择处理方式，或点击「其余全部保留本机」。');
+          setCfMsg('请先选择处理方式，或用下面的「全部设为…」一键选中某一项。');
           return;
         }
         let applied = 0;
@@ -682,6 +717,19 @@ window.__ModuleLoader__.load({
 
       const conflictCount = pending.reduce((a, p) => a + p.conflicts.length, 0);
       const chosenCount = pending.reduce((a, p) => a + p.conflicts.filter((c) => decisions[c.id]).length, 0);
+      // 「一键全部设为 X」：只统计真正支持该选项的冲突（删除类只支持 delete/keep，
+      // 内容类只支持 local/remote/both），所以每个按钮上带的数字是准确的影响面。
+      const bulkChoices = (() => {
+        const counts = new Map();
+        for (const p of pending) {
+          for (const c of p.conflicts) {
+            for (const o of optionsFor(c)) counts.set(o.value, (counts.get(o.value) || 0) + 1);
+          }
+        }
+        return [...counts.entries()]
+          .filter(([, n]) => n > 0)
+          .map(([value, n]) => ({ value, n, label: BULK_LABEL[value] || value }));
+      })();
       const repo = status && status.repo;
       const res = (runSummary && runSummary.result) || null;
 
@@ -960,24 +1008,24 @@ window.__ModuleLoader__.load({
             onRepair: openRepair,
             onRepairApply: applyRepair,
           }))),
-          e('div', { className: 'dcs-row', style: { marginTop: 12 } },
+          // 一键全选单独一行：选项最多 5 个，挤在主动作旁边会把「应用」埋掉
+          bulkChoices.length ? e('div', { className: 'dcs-row', style: { marginTop: 12 } },
+            e('span', { className: 'dcs-note' }, '一键全部设为：'),
+            bulkChoices.map((o) => e('button', {
+              key: o.value,
+              className: 'dcs-btn dcs-btn-outline',
+              type: 'button',
+              disabled: running,
+              title: `把支持这一选项的 ${o.n} 项一次全设为「${o.label}」（会覆盖已选的）`,
+              onClick: () => applyBulk(o.value),
+            }, `${o.label}（${o.n}）`))) : null,
+          e('div', { className: 'dcs-row', style: { marginTop: 8 } },
             e('button', {
               className: 'dcs-btn dcs-btn-primary',
               type: 'button',
               disabled: running || !chosenCount,
               onClick: applyDecisions,
             }, chosenCount ? `应用所选 ${chosenCount} 项` : '应用所选项目'),
-            e('button', {
-              className: 'dcs-btn dcs-btn-outline',
-              type: 'button',
-              disabled: running,
-              onClick: () => {
-                const all = {};
-                for (const p of pending) for (const c of p.conflicts) all[c.id] = 'local';
-                setDecisions(all);
-                setCfMsg('已将全部冲突标记为「保留本机」，请点击「应用所选项目」。');
-              },
-            }, '其余全部保留本机'),
             e('button', { className: 'dcs-btn dcs-btn-danger', type: 'button', disabled: running, onClick: discardPending }, '放弃本次裁决记录')),
           cfMsg ? e('div', { className: cfMsg.startsWith('已应用') || cfMsg.startsWith('已把') ? 'dcs-ok' : 'dcs-err', style: { marginTop: 8 } }, cfMsg) : null,
           e('div', { className: 'dcs-note', style: { marginTop: 8 } },
