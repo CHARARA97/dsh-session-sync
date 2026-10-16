@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SyncEngine } from '../lib/engine.js';
+import { ProgressLog } from '../lib/progress.js';
 import { sessionSlugFromCwd, inspectSessionLog } from '../lib/session.js';
 import { zstdEncode, zstdDecode, run } from '../lib/util.js';
 
@@ -573,6 +574,35 @@ async function main() {
     // 非会话路径 / 不存在的文件：明确报错，不瞎改
     assert.equal((await engineA.previewSessionRepair('storages/workspace.json')).ok, false);
     assert.equal((await engineA.previewSessionRepair('sessions/xx/nope/session.v4.jsonl.zstd')).ok, false);
+  });
+
+  await step('删除类裁决不再掉进「两边都留」（曾经抛 path null 并报错两次）', async () => {
+    // 复盘真实事故：一条 delete-local 的**工作区**冲突，没有 side 字段、没有留存远端副本。
+    // 旧代码里它既不走 local 也不走 remote，于是掉进「两边都留」的 else，
+    // 去 path.join(pending.dir, null) —— 直接抛 TypeError，报文里出现两次。
+    const store = engineA.newPendingStore({ progress: new ProgressLog() });
+    await engineA.recordConflict(store, {
+      repo: `ws:${WS_A}`, relPath: 'vendor/inner', kind: 'file', reason: 'delete-local',
+    });
+    const saved = engineA.savePending(store);
+    const cid = store.conflicts[0].id;
+    assert.equal(store.conflicts[0].side, 'pull', '记录时应当带上 side 默认值');
+
+    const r = await engineA.resolveConflicts({ pendingId: saved.id, decisions: [{ id: cid, choice: 'delete' }] });
+    const msg = String(r.error || '');
+    assert.ok(!/must be of type string/.test(msg), `不该再抛 path 类型错误：${msg}`);
+    assert.ok(!/Received null/.test(msg), `不该再出现 null 路径：${msg}`);
+
+    // 「两边都留」在缺少远端副本时也必须明确报错，而不是抛异常
+    const store2 = engineA.newPendingStore({ progress: new ProgressLog() });
+    await engineA.recordConflict(store2, {
+      repo: `ws:${WS_A}`, relPath: 'vendor/other', kind: 'file', reason: 'text-overlap', side: 'pull',
+    });
+    const saved2 = engineA.savePending(store2);
+    const r2 = await engineA.resolveConflicts({ pendingId: saved2.id, decisions: [{ id: store2.conflicts[0].id, choice: 'both' }] });
+    const msg2 = String(r2.error || '');
+    assert.ok(!/must be of type string/.test(msg2), `「两边都留」缺副本时不该抛类型错误：${msg2}`);
+    assert.ok(/没有留存远端版本/.test(msg2), `应当明确说明缺少远端副本，实际：${msg2}`);
   });
 
   await step('配置读写：remote/branch 落到 chat-sync.json', () => {
