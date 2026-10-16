@@ -1,6 +1,6 @@
 {
   "name": "@charara97/dsh-session-sync",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "DSH 会话与工作区文件同步：显式推送/取回、单个或全部会话、逐条判断、部分交付、冲突交由人工裁决。",
   "type": "module",
   "main": "index.js",

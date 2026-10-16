@@ -191,6 +191,42 @@ async function main() {
     assert.equal(readSessionRows(homeA, S2).length, before + 1, '纯追加的事件被自动合并进来');
   });
 
+  await step('回归：远端被「坏交付」退回旧版时，快进不得截断本机会话日志', async () => {
+    // 复现真实事故：main 上那一份被某次交付退回了更早的版本，而本机 HEAD 正是
+    // main 的祖先 —— 旧代码会走 `merge --ff-only` 然后直接 return，把本机日志截断。
+    const beforeBuf = fs.readFileSync(findSessionFile(homeA, S1));
+    const before = readSessionRows(homeA, S1).length;
+    const wc = path.join(root, 'bad-delivery');
+    assert.equal((await run('git', ['clone', '-q', REMOTE, wc])).code, 0, '克隆远端');
+    const target = findSessionFile(wc, S1);
+    assert.ok(target, '克隆里有这个会话');
+    fs.writeFileSync(target, sessionBuffer(S1, CWD_A, [userMsg('你好', 0, 1791000001000)]));
+    await run('git', ['-C', wc, 'add', '-A']);
+    assert.equal((await run('git', ['-C', wc, '-c', 'user.name=t', '-c', 'user.email=t@localhost',
+      'commit', '-q', '-m', 'bad delivery：把会话日志退回旧版'])).code, 0, '构造坏交付');
+    assert.equal((await run('git', ['-C', wc, 'push', '-q', 'origin', 'HEAD:refs/heads/main'])).code, 0, '坏交付已推到 main');
+
+    const r = await engineA.execute({ direction: 'pull', scope: 'all', includeWorkspace: false, reason: 'test' });
+    const afterBuf = fs.readFileSync(findSessionFile(homeA, S1));
+    const after = readSessionRows(homeA, S1).length;
+    assert.ok(after >= before, `本机会话日志被截断了：${before} → ${after} 行（pull ok=${r.ok}）`);
+    assert.ok(afterBuf.equals(beforeBuf),
+      `本机会话日志被远端旧版覆盖了：${before} → ${after} 行（pull ok=${r.ok}）`);
+  });
+
+  await step('回归：推送不得把比本机更旧的会话日志交付到远端', async () => {
+    appendToSession(homeA, S1, [userMsg('坏交付之后新追加的一行', 0, 1791000030000), assistantMsg('收到', 0, 1791000031000)]);
+    const localRows = readSessionRows(homeA, S1);
+    const r = await engineA.execute({ direction: 'push', scope: 'all', includeWorkspace: false, reason: 'test' });
+    assert.equal(r.ok, true, JSON.stringify(r.result?.error || r.error));
+    const verify = path.join(root, 'verify-push');
+    assert.equal((await run('git', ['clone', '-q', REMOTE, verify])).code, 0, '克隆远端核对');
+    const remoteRows = readSessionRows(verify, S1) || [];
+    assert.ok(remoteRows.length >= localRows.length,
+      `远端那一版比本机旧：本机 ${localRows.length} 行，远端 ${remoteRows.length} 行`);
+    assert.ok(textsOf(remoteRows).includes('坏交付之后新追加的一行'), '远端包含了本机新追加的行');
+  });
+
   await step('分叉：两边各自改了同一个会话 → pull 停下报告冲突且不动本机文件', async () => {
     appendToSession(homeA, S1, [userMsg('A 的分支内容', 2, 1791000020000)]);
     const pushA = await engineA.execute({ direction: 'push', scope: 'session', sessionIds: [S1], includeWorkspace: false, reason: 'test' });
